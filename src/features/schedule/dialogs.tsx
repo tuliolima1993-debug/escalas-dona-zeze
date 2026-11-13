@@ -5,6 +5,7 @@ import { fmtDayMonth, fmtShort } from '@/domain/dates';
 import { checkAvailability, hasSkill } from '@/domain/eligibility';
 import { defaultActivity } from '@/domain/scheduler';
 import { quotasFor, quotaUsage } from '@/domain/stats';
+import * as M from '@/domain/mutations';
 import type { DayMember, DayView } from '@/domain/validate';
 import type { WorkDay } from '@/domain/types';
 import { Button } from '@/components/ui/button';
@@ -243,6 +244,90 @@ export function WorkDayDialog({ open, onOpenChange, day }: { open: boolean; onOp
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button disabled={invalid} onClick={async () => { if (await run((r) => r.updateWorkDay(day.date, { startTime: start, endTime: end, note: note.trim() || null }), 'Sábado atualizado.')) onOpenChange(false); }}>Salvar</Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export type DropSource = { kind: 'assignment'; id: string } | { kind: 'employee'; employeeId: string };
+
+/**
+ * Ao soltar um nome sobre outra pessoa: o administrador escolhe o que quer fazer.
+ * Cada opção é simulada com as mesmas regras do sistema; as impossíveis aparecem com o motivo.
+ */
+export function DropChoiceDialog({ open, onOpenChange, source, target, targetDate, pickActivity }: {
+  open: boolean; onOpenChange: (o: boolean) => void; source: DropSource; target: DayMember; targetDate: string;
+  pickActivity: (employeeId: string) => string | null;
+}) {
+  const { s, run } = useSnapshot();
+  const L = useLookups();
+  const srcAssignment = source.kind === 'assignment' ? s.assignments.find((a) => a.id === source.id) : undefined;
+  const srcEmp = source.kind === 'employee' ? source.employeeId : srcAssignment?.employeeId ?? null;
+  const srcDate = srcAssignment ? s.workDays.find((w) => w.id === srcAssignment.workDayId)?.date : undefined;
+  const who = L.empName(srcEmp);
+  const tgtName = target.employeeId ? L.empName(target.employeeId) : target.reservedLabel ?? 'a vaga';
+  const actFor = () => {
+    const e = L.emp.get(srcEmp ?? '');
+    return target.activityId && e?.skillIds.includes(target.activityId) ? target.activityId : srcEmp ? pickActivity(srcEmp) : null;
+  };
+
+  const tryIt = (fn: () => unknown): string | null => {
+    try { fn(); return null; } catch (e) { return e instanceof Error ? e.message : 'Não permitido.'; }
+  };
+
+  const options: { key: string; title: string; desc: string; error: string | null; act: () => Promise<boolean> }[] = [];
+  if (srcAssignment && srcDate) {
+    options.push({
+      key: 'move',
+      title: `Mover ${who} para o lugar de ${tgtName}`,
+      desc: `${who} sai de ${fmtShort(srcDate)} e entra em ${fmtShort(targetDate)}. ${tgtName} sai da escala${target.employeeId ? ' e a participação volta ao banco' : ''}. O total de ${who} no mês não muda.`,
+      error: tryIt(() => M.moveReplacing(s, srcAssignment.id, target.key)),
+      act: () => run((r) => r.moveReplacing(srcAssignment.id, target.key), `${who} entrou no lugar de ${tgtName}.`),
+    });
+    if (target.employeeId) {
+      options.push({
+        key: 'swap',
+        title: `Trocar ${who} ⇄ ${tgtName}`,
+        desc: `${who} vai para ${fmtShort(targetDate)} e ${tgtName} vai para ${fmtShort(srcDate)}. Ninguém sai da escala.`,
+        error: tryIt(() => M.swapAssignments(s, srcAssignment.id, target.key)),
+        act: () => run((r) => r.swapAssignments(srcAssignment.id, target.key), 'Troca realizada.'),
+      });
+    }
+  }
+  if (srcEmp) {
+    options.push({
+      key: 'replace',
+      title: `Substituir ${tgtName} por ${who}${srcAssignment ? ' (mantendo o outro dia)' : ''}`,
+      desc: srcAssignment
+        ? `${who} continua em ${fmtShort(srcDate!)} e também entra em ${fmtShort(targetDate)}${quotasFor(s, Number(targetDate.slice(0, 4)), Number(targetDate.slice(5, 7))) ? ', usando mais uma participação da cota' : ''}. ${tgtName} sai.`
+        : `${who} entra em ${fmtShort(targetDate)} no lugar de ${tgtName}${target.employeeId ? ', que volta ao banco' : ''}.`,
+      error: tryIt(() => M.replaceAssignment(s, target.key, srcEmp, actFor())),
+      act: () => run((r) => r.replaceAssignment(target.key, srcEmp, actFor()), `${tgtName} substituído(a) por ${who}.`),
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>O que você quer fazer?</DialogTitle>
+          <DialogDescription>Você soltou {who} sobre {tgtName} ({fmtDayMonth(targetDate)}).</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-2">
+          {options.map((o) => (
+            <button
+              key={o.key}
+              disabled={!!o.error}
+              onClick={async () => { if (await o.act()) onOpenChange(false); }}
+              className="w-full rounded-xl border border-border px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-transparent"
+            >
+              <p className="text-sm font-bold">{o.title}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{o.desc}</p>
+              {o.error && <p className="mt-1 text-xs font-semibold text-red-600">Não disponível: {o.error}</p>}
+            </button>
+          ))}
+        </DialogBody>
+        <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

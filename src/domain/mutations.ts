@@ -218,6 +218,13 @@ export function swapAssignments(prev: Snapshot, aId: string, bId: string): Snaps
   const tmp = { e: a.employeeId, r: a.reservedLabel, q: a.requiredSkillId };
   a.employeeId = b.employeeId; a.reservedLabel = b.reservedLabel; a.requiredSkillId = b.requiredSkillId; a.activityId = actA; a.attendance = null;
   b.employeeId = tmp.e; b.reservedLabel = tmp.r; b.requiredSkillId = tmp.q; b.activityId = actB; b.attendance = null;
+  const nameOf = (id: string | null) => s.employees.find((e) => e.id === id)?.shortName ?? 'O colaborador';
+  const dm = (w: typeof wa) => w.date.split('-').reverse().slice(0, 2).join('/');
+  // depois da troca: a (dia A) tem a pessoa que veio de B, e vice-versa
+  if (a.employeeId && activeOn(s, wa.id).some((x) => x.employeeId === a.employeeId && x.id !== a.id))
+    throw new DomainError(`Não dá para trocar: ${nameOf(a.employeeId)} já está escalado(a) em ${dm(wa)}. Use “Substituir” ou “Mover para o lugar”.`);
+  if (b.employeeId && activeOn(s, wb.id).some((x) => x.employeeId === b.employeeId && x.id !== b.id))
+    throw new DomainError(`Não dá para trocar: ${nameOf(b.employeeId)} já está escalado(a) em ${dm(wb)}. Use “Substituir” ou “Mover para o lugar”.`);
   assertMember(s, wa, a, a.id);
   assertMember(s, wb, b, b.id);
   if ((wa.countsInQuota !== false) !== (wb.countsInQuota !== false)) {
@@ -246,6 +253,45 @@ export function moveAssignment(prev: Snapshot, id: string, targetDate: ISODate):
   a.attendance = null;
   a.position = activeOn(s, to.id).length;
   touch(s, from);
+  return s;
+}
+
+/**
+ * Move uma pessoa para outro dia ocupando o lugar de alguém que sai da escala
+ * (quem sai volta ao banco de cotas). Em escala publicada, quem sai fica registrado como "substituído".
+ */
+export function moveReplacing(prev: Snapshot, sourceId: string, targetId: string): Snapshot {
+  const s = clone(prev);
+  const a = s.assignments.find((x) => x.id === sourceId && x.status === 'active');
+  const t = s.assignments.find((x) => x.id === targetId && x.status === 'active');
+  if (!a || !t) throw new DomainError('Participação não encontrada.');
+  if (a.workDayId === t.workDayId) throw new DomainError('As duas pessoas já estão no mesmo dia.');
+  const from = s.workDays.find((w) => w.id === a.workDayId)!;
+  const to = s.workDays.find((w) => w.id === t.workDayId)!;
+  assertEditable(s, from);
+  assertEditable(s, to);
+  const e = s.employees.find((x) => x.id === a.employeeId);
+  if (activeOn(s, to.id).some((x) => x.employeeId === a.employeeId)) throw new DomainError(`${e?.shortName ?? 'O colaborador'} já está neste dia.`);
+  const published = scheduleOfDay(s, to).status !== 'draft';
+  // quem sai
+  if (published && t.employeeId) {
+    t.status = 'replaced';
+    t.replacedById = a.id;
+  } else {
+    s.assignments = s.assignments.filter((x) => x.id !== t.id);
+  }
+  // quem entra assume a vaga (e a atividade, se for habilitado)
+  const activity = t.activityId && e && hasSkill(e, t.activityId) ? t.activityId : a.activityId;
+  if (t.requiredSkillId && e && !hasSkill(e, t.requiredSkillId)) throw new DomainError('A vaga exige uma habilidade que o colaborador não possui.');
+  if (from.countsInQuota === false && to.countsInQuota !== false) assertQuota(s, to, a.employeeId, a.id);
+  a.workDayId = to.id;
+  a.activityId = activity;
+  a.reservedLabel = t.reservedLabel;
+  a.requiredSkillId = t.requiredSkillId;
+  a.attendance = null;
+  a.position = t.position;
+  touch(s, from);
+  touch(s, to);
   return s;
 }
 

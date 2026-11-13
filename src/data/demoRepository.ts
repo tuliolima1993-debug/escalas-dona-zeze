@@ -202,6 +202,7 @@ export function createDemoRepository(): Repository {
     },
     async removeAssignment(id) { await apply('Colaborador removido', (s) => M.removeAssignment(s, id)); },
     async replaceAssignment(id, emp, act) { await apply('Substituição', (s) => M.replaceAssignment(s, id, emp, act)); },
+    async moveReplacing(a, b) { await apply('Movido para o lugar de outra pessoa', (s) => M.moveReplacing(s, a, b)); },
     async swapAssignments(a, b) { await apply('Troca entre sábados', (s) => M.swapAssignments(s, a, b)); },
     async moveAssignment(id, date) { await apply('Movido para outro sábado', (s) => M.moveAssignment(s, id, date)); },
     async setDayLocked(date, locked) { await apply(locked ? 'Sábado bloqueado' : 'Sábado desbloqueado', (s) => M.setDayLocked(s, date, locked)); },

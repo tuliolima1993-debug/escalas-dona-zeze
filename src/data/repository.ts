@@ -30,6 +30,8 @@ export interface Repository {
   removeAssignment(id: string): Promise<void>;
   replaceAssignment(id: string, employeeId: string, activityId: string | null): Promise<void>;
   swapAssignments(a: string, b: string): Promise<void>;
+  /** Move a pessoa para o lugar de outra, que sai da escala (volta ao banco). */
+  moveReplacing(sourceId: string, targetId: string): Promise<void>;
   moveAssignment(id: string, date: ISODate): Promise<void>;
   setDayLocked(date: ISODate, locked: boolean): Promise<void>;
   updateWorkDay(date: ISODate, patch: Partial<Pick<WorkDay, 'startTime' | 'endTime' | 'note'>>): Promise<void>;

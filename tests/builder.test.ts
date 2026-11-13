@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildGenerateInput, resultToCommit, suggestQuotas } from '../src/domain/generate-input';
 import {
-  addAssignment, commitMonth, moveAssignment, removeAssignment, removeExtraDay, saveExtraDay, setQuotas,
+  addAssignment, commitMonth, moveAssignment, moveReplacing, removeAssignment, removeExtraDay, saveExtraDay, setQuotas,
   setScheduleStatus, swapAssignments, DomainError,
 } from '../src/domain/mutations';
 import { generateSchedule } from '../src/domain/scheduler';
@@ -191,4 +191,25 @@ describe('regras gerais do construtor', () => {
     s = { ...s, employees: [...s.employees, { ...s.employees[0], id: 'em-novo', fullName: 'Novo Colaborador', shortName: 'Novo C.' }] };
     expect(JSON.stringify(dayViewsFor(s, Y, M).map((d) => d.members))).toBe(before);
   });
+
+  it('mover para o lugar de outra pessoa: quem sai volta ao banco e a cota de quem entra não muda', () => {
+    let s = setQuotas(seedSnapshot(), Y, M, { 'em-marcelo': 2, 'em-david': 2, 'em-ediane': 2 }, true);
+    s = put(s, '2026-11-07', 'em-marcelo', SKILL.clonagem);
+    s = put(s, '2026-11-21', 'em-marcelo', SKILL.clonagem);
+    s = put(s, '2026-11-14', 'em-david', SKILL.cultivo);
+    s = put(s, '2026-11-14', 'em-ediane', SKILL.clonagem);
+    // troca Marcelo(07) ⇄ Ediane(14) é possível; mas Marcelo no lugar de David(14) também
+    s = moveReplacing(s, idOn(s, '2026-11-07', 'em-marcelo'), idOn(s, '2026-11-14', 'em-david'));
+    const u = quotaUsage(s, Y, M);
+    expect(u['em-marcelo']).toBe(2);
+    expect(u['em-david'] ?? 0).toBe(0);
+    const d14 = dayViewsFor(s, Y, M)[1];
+    expect(d14.members.map((m) => m.employeeId).sort()).toEqual(['em-ediane', 'em-marcelo']);
+    // Marcelo já está no dia 21: não pode ir para o lugar de alguém no mesmo dia 21
+    s = put(s, '2026-11-21', 'em-ediane', SKILL.clonagem);
+    expect(() => moveReplacing(s, idOn(s, '2026-11-14', 'em-marcelo'), idOn(s, '2026-11-21', 'em-ediane'))).toThrow(/já está neste dia/);
+    // troca impossível explica o motivo
+    expect(() => swapAssignments(s, idOn(s, '2026-11-14', 'em-marcelo'), idOn(s, '2026-11-21', 'em-ediane'))).toThrow(/Não dá para trocar/);
+  });
 });
+

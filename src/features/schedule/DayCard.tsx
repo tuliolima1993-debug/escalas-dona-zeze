@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Badge, Dot, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Tip } from '@/components/ui/misc';
 import { cn, tint } from '@/lib/utils';
 import { useLookups } from './lookups';
-import { PersonPickerDialog, SwapDialog, WorkDayDialog } from './dialogs';
+import { DropChoiceDialog, PersonPickerDialog, SwapDialog, WorkDayDialog, type DropSource } from './dialogs';
 import { ExtraDayDialog } from './ExtraDayDialog';
 
 export type CardMode = 'view' | 'edit' | 'attendance' | 'preview';
@@ -79,6 +79,7 @@ export function DayCard({ day, issues = [], mode, reasons, isPast, compact, clos
   const [swapFor, setSwapFor] = useState<DayMember | null>(null);
   const [editDay, setEditDay] = useState(false);
   const [editExtra, setEditExtra] = useState(false);
+  const [dropChoice, setDropChoice] = useState<null | { source: DropSource; target: DayMember }>(null);
   const extra = day.kind === 'extra';
   const [dragOver, setDragOver] = useState<string | null>(null);
 
@@ -103,15 +104,17 @@ export function DayCard({ day, issues = [], mode, reasons, isPast, compact, clos
     e.stopPropagation();
     setDragOver(null);
     const emp = e.dataTransfer.getData(EMP_MIME);
+    const target = targetKey ? day.members.find((m) => m.key === targetKey) : undefined;
     if (emp) {
-      placeEmployee(emp);
+      if (target) setDropChoice({ source: { kind: 'employee', employeeId: emp }, target });
+      else placeEmployee(emp);
       return;
     }
     const id = e.dataTransfer.getData(DRAG_MIME);
     if (!id || id === targetKey) return;
-    if (day.members.some((m) => m.key === id)) return; // mesmo sábado
-    if (targetKey) run((r) => r.swapAssignments(id, targetKey), 'Troca realizada. Escala revalidada.');
-    else run((r) => r.moveAssignment(id, day.date), 'Colaborador movido de sábado.');
+    if (day.members.some((m) => m.key === id)) return; // mesmo dia
+    if (target) setDropChoice({ source: { kind: 'assignment', id }, target });
+    else run((r) => r.moveAssignment(id, day.date), 'Colaborador movido de data.');
   };
 
   return (
@@ -198,7 +201,7 @@ export function DayCard({ day, issues = [], mode, reasons, isPast, compact, clos
               key={m.key}
               draggable={canDnD && !!m.employeeId}
               onDragStart={(ev) => { ev.dataTransfer.setData(DRAG_MIME, m.key); ev.dataTransfer.effectAllowed = 'move'; }}
-              onDragOver={canDnD ? (ev) => { if (ev.dataTransfer.types.includes(DRAG_MIME)) { ev.preventDefault(); ev.stopPropagation(); setDragOver(m.key); } else if (ev.dataTransfer.types.includes(EMP_MIME)) { ev.preventDefault(); } } : undefined}
+              onDragOver={canDnD ? (ev) => { if (ev.dataTransfer.types.includes(DRAG_MIME)) { ev.preventDefault(); ev.stopPropagation(); setDragOver(m.key); } else if (ev.dataTransfer.types.includes(EMP_MIME)) { ev.preventDefault(); ev.stopPropagation(); setDragOver(m.key); } } : undefined}
               onDragLeave={canDnD ? () => setDragOver(null) : undefined}
               onDrop={canDnD ? (ev) => onDrop(ev, m.key) : undefined}
               className={cn(
@@ -321,6 +324,10 @@ export function DayCard({ day, issues = [], mode, reasons, isPast, compact, clos
       {swapFor && <SwapDialog open onOpenChange={(o) => !o && setSwapFor(null)} source={swapFor} sourceDate={day.date} allDays={allDays} />}
       {editDay && <WorkDayDialog open onOpenChange={setEditDay} day={day} />}
       {editExtra && <ExtraDayDialog open onOpenChange={setEditExtra} day={day} />}
+      {dropChoice && (
+        <DropChoiceDialog open onOpenChange={(o) => !o && setDropChoice(null)} source={dropChoice.source} target={dropChoice.target}
+          targetDate={day.date} pickActivity={(id) => pickActivity(snapshot!, day, id)} />
+      )}
     </div>
   );
 }

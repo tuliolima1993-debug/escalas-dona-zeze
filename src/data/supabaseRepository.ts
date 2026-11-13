@@ -152,6 +152,23 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
     async swapAssignments(a, b) {
       await rpc('swap_assignments', { p_a: a, p_b: b });
     },
+    async moveReplacing(sourceId, targetId) {
+      // Validado antes no navegador com as mesmas regras (mutations.moveReplacing).
+      const t: any = check(await sb.from('assignments')
+        .select('id, employee_id, activity_id, reserved_label, required_skill_id, position, work_days(date, schedules(status))')
+        .eq('id', targetId).single());
+      const src: any = check(await sb.from('assignments').select('id, employee_id').eq('id', sourceId).single());
+      const published = t.work_days?.schedules?.status && t.work_days.schedules.status !== 'draft';
+      const { data: skills } = await sb.from('employee_skills').select('skill_id').eq('employee_id', src.employee_id);
+      const has = (k: string | null) => !!k && (skills ?? []).some((x: any) => x.skill_id === k);
+      if (published && t.employee_id) check(await sb.from('assignments').update({ status: 'replaced' }).eq('id', targetId));
+      else check(await sb.from('assignments').delete().eq('id', targetId));
+      await rpc('move_assignment', { p_id: sourceId, p_date: t.work_days.date });
+      const patch: Record<string, unknown> = { position: t.position, reserved_label: t.reserved_label, required_skill_id: t.required_skill_id };
+      if (has(t.activity_id)) patch.activity_id = t.activity_id;
+      check(await sb.from('assignments').update(patch).eq('id', sourceId));
+      if (published && t.employee_id) check(await sb.from('assignments').update({ replaced_by_id: sourceId }).eq('id', targetId));
+    },
     async moveAssignment(id, date) {
       await rpc('move_assignment', { p_id: id, p_date: date });
     },
