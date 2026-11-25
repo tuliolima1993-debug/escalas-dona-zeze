@@ -13,6 +13,9 @@ export interface Repository {
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
   resetPassword(email: string): Promise<void>;
+  updatePassword(password: string): Promise<void>;
+  /** true quando o usuário chegou pelo link de redefinição de senha */
+  isPasswordRecovery(): boolean;
   onAuthChange(cb: () => void): () => void;
 
   load(): Promise<Snapshot>;

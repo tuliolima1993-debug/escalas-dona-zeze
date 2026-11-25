@@ -4,6 +4,9 @@ import { useData } from '@/data/DataProvider';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/button';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { SetPasswordPage } from '@/features/auth/SetPasswordPage';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { EmployeesPage } from '@/features/employees/EmployeesPage';
 import { HistoryPage } from '@/features/history/HistoryPage';
@@ -40,7 +43,8 @@ const routes = [
 const router = (import.meta.env.VITE_DATA_MODE === 'demo' ? createHashRouter : createBrowserRouter)(routes);
 
 export default function App() {
-  const { authChecked, profile, snapshot, loadError, reload } = useData();
+  const { authChecked, profile, snapshot, loadError, reload, repo } = useData();
+  const [, force] = useState(0);
   if (!authChecked || (profile && !snapshot && !loadError)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -49,6 +53,9 @@ export default function App() {
     );
   }
   if (!profile) return <LoginPage />;
+  if (repo.isPasswordRecovery()) {
+    return <SetPasswordPage onDone={() => { toast.success('Senha alterada. Use a nova senha nos próximos acessos.'); force((n) => n + 1); }} />;
+  }
   if (loadError && !snapshot) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">

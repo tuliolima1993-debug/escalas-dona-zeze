@@ -135,6 +135,8 @@ export function createDemoRepository(): Repository {
     async signIn() {},
     async signOut() {},
     async resetPassword() {},
+    async updatePassword() {},
+    isPasswordRecovery() { return false; },
     onAuthChange(cb) { listeners.add(cb); return () => listeners.delete(cb); },
 
     async load() {

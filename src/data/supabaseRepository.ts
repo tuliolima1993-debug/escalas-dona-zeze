@@ -18,7 +18,10 @@ function check<T>(r: { data: T; error: { message: string; code?: string } | null
 }
 
 export function createSupabaseRepository(url: string, anonKey: string): Repository {
-  const sb: SupabaseClient = createClient(url, anonKey, { auth: { persistSession: true, autoRefreshToken: true } });
+  // O link de redefinição de senha chega com "type=recovery" no endereço
+  let recovery = typeof window !== 'undefined' && /type=recovery/.test(window.location.hash + window.location.search);
+  const sb: SupabaseClient = createClient(url, anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  sb.auth.onAuthStateChange((event) => { if (event === 'PASSWORD_RECOVERY') recovery = true; });
   const rpc = async (fn: string, args: Record<string, unknown>) => check(await sb.rpc(fn, args));
 
   return {
@@ -41,8 +44,18 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
     },
     async resetPassword(email) {
       const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-      if (error) throw new DomainError(error.message);
+      if (error) {
+        if (/rate limit|too many|seconds/i.test(error.message)) throw new DomainError('Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo (o envio gratuito de e-mails é limitado).');
+        throw new DomainError(error.message);
+      }
     },
+    async updatePassword(password) {
+      const { error } = await sb.auth.updateUser({ password });
+      if (error) throw new DomainError(error.message.includes('different') ? 'A nova senha precisa ser diferente da anterior.' : error.message);
+      recovery = false;
+      if (window.location.hash) history.replaceState(null, '', window.location.pathname);
+    },
+    isPasswordRecovery() { return recovery; },
     onAuthChange(cb) {
       const { data } = sb.auth.onAuthStateChange(() => cb());
       return () => data.subscription.unsubscribe();

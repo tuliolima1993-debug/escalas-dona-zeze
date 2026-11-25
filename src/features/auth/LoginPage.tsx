@@ -11,6 +11,8 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,11 +48,19 @@ export function LoginPage() {
           <Field label="E-mail"><Input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
           <Field label="Senha" error={error ?? undefined}><Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
           <Button type="submit" size="lg" className="w-full" disabled={busy}><LogIn />{busy ? 'Entrando…' : 'Entrar'}</Button>
-          <button type="button" className="w-full text-center text-sm font-semibold text-emerald-700 hover:underline"
+          <button type="button" disabled={sending} className="w-full text-center text-sm font-semibold text-emerald-700 hover:underline disabled:opacity-60"
             onClick={async () => {
-              if (!email) return setError('Informe o e-mail para redefinir a senha.');
-              try { await repo.resetPassword(email.trim()); toast.success('Enviamos um link de redefinição para o seu e-mail.'); } catch (e) { setError(e instanceof Error ? e.message : 'Erro.'); }
-            }}>Esqueci minha senha</button>
+              setError(null); setInfo(null);
+              if (!email.trim()) { setError('Digite o seu e-mail no campo acima e clique de novo em “Esqueci minha senha”.'); return; }
+              setSending(true);
+              try {
+                await repo.resetPassword(email.trim());
+                setInfo(`Se ${email.trim()} estiver cadastrado, enviamos um link para criar uma nova senha. Veja a caixa de entrada e o spam. O link abre esta página para você definir a senha nova.`);
+                toast.success('E-mail de redefinição enviado.');
+              } catch (e) { setError(e instanceof Error ? e.message : 'Não foi possível enviar o e-mail.'); }
+              finally { setSending(false); }
+            }}>{sending ? 'Enviando…' : 'Esqueci minha senha'}</button>
+          {info && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">{info}</p>}
         </form>
       </div>
     </div>
