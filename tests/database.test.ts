@@ -29,7 +29,7 @@ beforeAll(async () => {
     create role authenticated nologin; create role anon nologin;
     create schema auth;
     grant usage on schema auth to authenticated;
-    create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
+    create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}', is_anonymous boolean default false);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     grant execute on function auth.uid() to authenticated;
   `);
@@ -192,6 +192,15 @@ describe('banco de dados (migrations + RLS)', () => {
     await as(SUPER, `select public.remove_extra_day('2027-01-04')`);
     const [c] = await as(null, `select count(*)::int n from public.work_days where date = '2027-01-04'`);
     expect(c.n).toBe(0);
+  });
+
+  it('acesso aberto: sessão anônima entra como administrador "Equipe"', async () => {
+    const ANON = '00000000-0000-0000-0000-0000000000ee';
+    await db.exec(`insert into auth.users (id, email, is_anonymous) values ('${ANON}', null, true)`);
+    const [p] = await as(null, `select name, role from public.profiles where id = '${ANON}'`);
+    expect(p).toEqual({ name: 'Equipe', role: 'admin' });
+    const r = await as(ANON, `select count(*)::int n from public.employees`);
+    expect(r[0].n).toBeGreaterThan(0);
   });
 });
 

@@ -135,3 +135,11 @@ A chave *anon* é pública por design — a proteção vem das políticas RLS.
 | 14 | Impressão A4/A3 sem cortes | `print.test.ts` |
 
 Os testes de banco executam as **migrations reais** em um PostgreSQL embarcado e verificam RLS, gatilhos, publicação bloqueada, auditoria e as funções RPC.
+
+## 9. Acesso aberto (sem senha)
+
+Com `VITE_OPEN_ACCESS=true` no `.env.production`, o sistema abre direto, sem tela de login:
+cada navegador recebe uma sessão anônima do Supabase com o perfil de administrador "Equipe".
+Requer no Supabase: **Authentication → Sign In / Providers → Allow anonymous sign-ins = ligado**.
+Qualquer pessoa com o link pode ver e alterar as escalas. Para voltar a exigir login,
+desligue essa opção no Supabase e remova a variável.

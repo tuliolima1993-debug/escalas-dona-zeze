@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { DomainError } from '@/domain/mutations';
+import { env } from '@/lib/env';
 import { DEFAULT_SETTINGS, type AuditEntry, type Profile, type Snapshot } from '@/domain/types';
 import type { Repository } from './repository';
 
@@ -28,7 +29,17 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
     mode: 'supabase',
 
     async currentProfile() {
-      const { data } = await sb.auth.getSession();
+      let { data } = await sb.auth.getSession();
+      if (!data.session && env.openAccess) {
+        // Acesso aberto: entra automaticamente com uma sessão anônima (sem senha)
+        const { error } = await sb.auth.signInAnonymously();
+        if (error) {
+          throw new DomainError(/anonymous/i.test(error.message)
+            ? 'Acesso sem senha desativado no Supabase. Ligue “Allow anonymous sign-ins” em Authentication → Sign In / Providers.'
+            : error.message);
+        }
+        data = (await sb.auth.getSession()).data;
+      }
       const user = data.session?.user;
       if (!user) return null;
       const p = check(await sb.from('profiles').select('*').eq('id', user.id).maybeSingle());

@@ -6,6 +6,7 @@ import { resetDemoData, setDemoRole } from '@/data/demoRepository';
 import { ROLE_LABEL, type Role } from '@/domain/types';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/misc';
 import { cn } from '@/lib/utils';
+import { env } from '@/lib/env';
 
 const NAV = [
   { to: '/', label: 'Painel', icon: LayoutDashboard, end: true },
@@ -21,7 +22,7 @@ const NAV = [
 export function AppShell() {
   const { profile, repo, can, reload } = useData();
   const [open, setOpen] = useState(false);
-  const items = NAV.filter((n) => (!n.admin || can.admin) && (!n.edit || can.edit));
+  const items = NAV.filter((n) => (!n.admin || can.admin) && (!n.edit || can.edit) && !(env.openAccess && n.to === '/usuarios'));
   const demo = repo.mode === 'demo';
 
   const nav = (
@@ -48,7 +49,7 @@ export function AppShell() {
         {brand}
         {nav}
         <div className="mt-auto rounded-xl bg-white/5 p-3 text-xs text-emerald-100/70">
-          {demo ? <p className="flex items-center gap-2 font-semibold text-amber-300"><FlaskConical className="h-4 w-4" />Modo demonstração</p> : <p>Conectado ao Supabase</p>}
+          {demo ? <p className="flex items-center gap-2 font-semibold text-amber-300"><FlaskConical className="h-4 w-4" />Modo demonstração</p> : <p>{env.openAccess ? 'Acesso aberto (sem senha)' : 'Conectado ao Supabase'}</p>}
         </div>
       </aside>
 
@@ -86,7 +87,7 @@ export function AppShell() {
                   <MenuItem onSelect={() => { resetDemoData(); reload(); }}><RotateCcw />Restaurar dados de exemplo</MenuItem>
                 </>
               )}
-              {!demo && <><MenuSeparator /><MenuItem onSelect={() => repo.signOut()}><LogOut />Sair</MenuItem></>}
+              {!demo && !env.openAccess && <><MenuSeparator /><MenuItem onSelect={() => repo.signOut()}><LogOut />Sair</MenuItem></>}
             </MenuContent>
           </Menu>
         </div>
